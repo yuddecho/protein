@@ -7,12 +7,13 @@
 
 
 is_debug = False
-is_preprocessing_data = False
+is_test = True
+is_preprocessing_data = True
 
 # 训练方式
 # 0: normal training
 # 1: bayesian opt
-training_methods = 0
+training_methods = 1
 
 print('ok')
 
@@ -54,8 +55,9 @@ if is_preprocessing_data:
 
     data = pd.read_csv(t7_e_coli_2016_csv)
     
-    # 测试 取前 100 个数据
-    data = data.head(100)
+    if is_test:
+        # 测试 取前 100 个数据
+        data = data.head(100)
 
 
     # 规整到 [0, 1]
@@ -116,6 +118,8 @@ class SeqenceDataset(Dataset):
         return self.texts[i], self.labels[i]
 
 if is_debug:
+    train_csv, test_csv = 'data/train.csv', 'data/test.csv'
+    
     train_dataset = SeqenceDataset(train_csv)
     test_dataset = SeqenceDataset(test_csv)
 
@@ -132,7 +136,7 @@ import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
-def collote_fn(batch_samples):
+def collate_fn(batch_samples, tokenizer):
     batch_texts = []
     batch_labels = []
     
@@ -162,8 +166,8 @@ if is_debug:
     tokenizer = AutoTokenizer.from_pretrained(checkpoint, cache_dir=cache_dir, trust_remote_code=True)
     
     batch_size = 4
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collote_fn)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=collote_fn)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, tokenizer))
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, tokenizer))
     
     print(len(test_dataloader))
     print(len(train_dataloader.dataset))
@@ -255,7 +259,7 @@ from torch import nn
 from transformers import AutoModel
 
 class SequenceRegression(nn.Module):
-    def __init__(self, mlp_parma, dna_bert_2_requires_grad=False):
+    def __init__(self, mlp_parma, checkpoint, cache_dir, dna_bert_2_requires_grad=False):
         super(SequenceRegression, self).__init__()
         self.dna_bert_2 = AutoModel.from_pretrained(checkpoint, cache_dir=cache_dir, trust_remote_code=True)
         self.mlp = MLP(mlp_parma)
@@ -364,7 +368,7 @@ def train_loop(dataloader, model, loss_fn, optimizer, lr_scheduler, epoch, devic
         progress_bar.update(1)
         
     loss, rmse, r2 = loss_total / step_count, rmse_total / step_count, r2_total / step_count
-    print(f"Train Loss: {loss:0.1f} RMSE: {rmse:0.1f} R^2: {r2:0.1f}\n")
+#     print(f"Train Loss: {loss:0.1f} RMSE: {rmse:0.1f} R^2: {r2:0.1f}\n")
     
     return total_loss, [loss, rmse, r2]
 
@@ -413,14 +417,14 @@ def test_loop(dataloader, model, loss_fn, epoch, device, total_loss, mode='Test'
             progress_bar.update(1)
 
     loss, rmse, r2 = loss_total / step_count, rmse_total / step_count, r2_total / step_count
-    print(f"{mode} Loss: {loss:0.1f} RMSE: {rmse:0.1f} R^2: {r2:0.1f}\n")
+#     print(f"{mode} Loss: {loss:0.1f} RMSE: {rmse:0.1f} R^2: {r2:0.1f}\n")
     
     return total_loss, [loss, rmse, r2]
 
 
 # ### Normal training
 
-# In[14]:
+# In[13]:
 
 
 # 0: normal training
@@ -440,17 +444,17 @@ if training_methods == 0 and not is_debug:
     tag = f'{cache_dir}-{model_max_length}-{batch_size}-{learning_rate}-{epoch_num}'
     print(f'Tag: {tag}')
 
-    # model and train_result_data
+    # path: model and train_result_data
     model_bin = 'data/{tag}.bin'
     train_result_data = f'data/train-{tag}.csv'
     if os.path.exists(train_result_data):
         os.remove(train_result_data)
 
-    # data
+    # dataset
     train_csv, test_csv = 'data/train.csv', 'data/test.csv'
     train_dataset, test_dataset= SeqenceDataset(train_csv), SeqenceDataset(test_csv)
 
-    # for dataloader
+    # dataloader
     tokenizer = AutoTokenizer.from_pretrained(checkpoint, cache_dir=cache_dir, model_max_length=model_max_length)
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collote_fn)
@@ -463,7 +467,7 @@ if training_methods == 0 and not is_debug:
         'output_size': 1,
         'dropout_prob': 0.5
     }
-    model = SequenceRegression(mlp_parma)
+    model = SequenceRegression(mlp_parma, checkpoint, cache_dir)
     # print(model)
     
     # cuda
@@ -518,7 +522,7 @@ if training_methods == 0 and not is_debug:
 
 # ### Bayesian opt
 
-# In[ ]:
+# In[14]:
 
 
 # 1: bayesian opt
@@ -526,9 +530,19 @@ if training_methods == 1 and not is_debug:
     import os
     import sys
     from transformers import AdamW, get_scheduler
+    import optuna
     
     # bayesian opt
     def objective(_trial):
+        # 对数均匀分布的下界。通常是超参数的最小值，最大值
+        lr = _trial.suggest_float('lr', 1e-5, 1e-1, log=True)
+        hidden_dim = [
+            int(_trial.suggest_float('hidden_layer_1', 256, 768, log=True)),
+            int(_trial.suggest_float('hidden_layer_2', 256, 512, log=True)),
+            int(_trial.suggest_float('hidden_layer_3', 64, 384, log=True)),
+            int(_trial.suggest_float('hidden_layer_4', 32, 256, log=True))
+        ]
+        dropout = _trial.suggest_float('dropout', 0.3, 0.6, log=True)
 
         # hyper-parameters
         checkpoint = 'zhihan1996/DNABERT-2-117M'
@@ -536,37 +550,48 @@ if training_methods == 1 and not is_debug:
         model_max_length = int(3000 * 0.25)
 
         batch_size = 8
-        learning_rate = 1e-5
-        epoch_num = 3
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        tag = f'{cache_dir}-{model_max_length}-{batch_size}-{learning_rate}-{epoch_num}-{device}'
+        learning_rate = lr
+        epoch_num = 100
+        tag = f'{cache_dir}-{model_max_length}-{batch_size}-{learning_rate}-{epoch_num}'
         print(f'Tag: {tag}')
 
-        # model and train_result_data
+        # path: model and train_result_data
         model_bin = 'data/{tag}.bin'
         train_result_data = f'data/train-{tag}.csv'
         if os.path.exists(train_result_data):
             os.remove(train_result_data)
 
-        # data
+        # dataset
         train_csv, test_csv = 'data/train.csv', 'data/test.csv'
         train_dataset, test_dataset= SeqenceDataset(train_csv), SeqenceDataset(test_csv)
 
-        # for dataloader
+        # dataloader
         tokenizer = AutoTokenizer.from_pretrained(checkpoint, cache_dir=cache_dir, model_max_length=model_max_length)
 
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collote_fn)
-        test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=collote_fn)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, tokenizer))
+        test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, tokenizer))
 
         # model
         mlp_parma = {
             'input_size': 768,
-            'hidden_sizes': [768, 256, 128, 64],
+            'hidden_sizes': hidden_dim,
             'output_size': 1,
-            'dropout_prob': 0.5
+            'dropout_prob': dropout
         }
-        model = SequenceRegression(mlp_parma).to(device)
+    
+        model = SequenceRegression(mlp_parma, checkpoint, cache_dir)
         # print(model)
+
+        # cuda
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.device_count() > 1:
+            print(f"Let's use, {torch.cuda.device_count()}, GPUs!")
+            # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+            model = nn.DataParallel(model)
+        else:
+            print(f"Let's use, {device}!")
+
+        model = model.to(device)
 
         # loss fun
         loss_fn = nn.CrossEntropyLoss()
@@ -587,24 +612,30 @@ if training_methods == 1 and not is_debug:
         bast_r2 = -sys.maxsize - 1
         for t in range(epoch_num):
             print(f"Epoch {t+1}/{epoch_num}\n-------------------------------")
-            total_train_loss, train_data = train_loop(train_dataloader, model, loss_fn, optimizer, lr_scheduler, t+1, total_train_loss)
-            total_test_loss, test_data = test_loop(test_dataloader, model, loss_fn, t+1, total_test_loss, mode='Test')
+            total_train_loss, train_data = train_loop(train_dataloader, model, loss_fn, optimizer, lr_scheduler, t+1, device, total_train_loss)
+            total_test_loss, test_data = test_loop(test_dataloader, model, loss_fn, t+1, device, total_test_loss, mode='Test')
 
-            # save train data
-            tt_data = train_data + test_data
-            with open(train_result_data, 'a', encoding='utf-8') as w:
-                strs = ''
-                for item in tt_data:
-                    strs += f'{item:.4f},'
-                w.write(f'{strs[:-1]}\n')
-
-            # save bast model
+            # record bast model
             test_r2 = test_data[-1]
             if bast_r2 < test_r2:
                 bast_r2 = test_r2
-                torch.save(model.state_dict(), model_bin)
+                
+        return bast_r2
+    
+    # start bayesian opt
+    n_trials = 100
+    
+    # 取两个值之一：'minimize' 或 'maximize'。默认值是 'minimize'
+    study = optuna.create_study(direction='maximize')
+    study.optimize(objective, n_trials=n_trials)
 
-        print("Done!")
+    print("Number of finished trials: ", len(study.trials))
+    print("Best trial:")
+    trial = study.best_trial
+    print("  Value: ", trial.value)
+    print("  Params: ")
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))
 
 
 # ### load model and predicted
