@@ -10,7 +10,7 @@ is_debug = False
 is_test = True
 is_preprocessing_data = True
 
-use_mian_ssi = True
+use_main_ssi = True
 
 # 训练方式
 # 0: normal training
@@ -572,7 +572,11 @@ if training_methods == 1 and not is_debug:
         train_dataset, test_dataset= SeqenceDataset(train_csv), SeqenceDataset(test_csv)
 
         # dataloader
-        tokenizer = AutoTokenizer.from_pretrained(checkpoint, cache_dir=cache_dir, model_max_length=model_max_length)
+        if use_main_ssi:
+            tokenizer = AutoTokenizer.from_pretrained(checkpoint, model_max_length=model_max_length, trust_remote_code=True)
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(checkpoint, cache_dir=cache_dir, model_max_length=model_max_length, trust_remote_code=True)
+            
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, tokenizer))
         test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, tokenizer))
