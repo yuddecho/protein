@@ -10,6 +10,8 @@ is_debug = False
 is_test = True
 is_preprocessing_data = True
 
+use_mian_ssi = True
+
 # 训练方式
 # 0: normal training
 # 1: bayesian opt
@@ -261,7 +263,11 @@ from transformers import AutoModel
 class SequenceRegression(nn.Module):
     def __init__(self, mlp_parma, checkpoint, cache_dir, dna_bert_2_requires_grad=False):
         super(SequenceRegression, self).__init__()
-        self.dna_bert_2 = AutoModel.from_pretrained(checkpoint, cache_dir=cache_dir, trust_remote_code=True)
+        if use_main_ssi:
+            self.dna_bert_2 = AutoModel.from_pretrained(checkpoint, trust_remote_code=True)
+        else:
+            self.dna_bert_2 = AutoModel.from_pretrained(checkpoint, cache_dir=cache_dir, trust_remote_code=True)
+        
         self.mlp = MLP(mlp_parma)
         
         for param in self.dna_bert_2.parameters():
