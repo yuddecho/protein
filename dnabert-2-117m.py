@@ -466,8 +466,8 @@ if training_methods == 0 and not is_debug:
     else:
         tokenizer = AutoTokenizer.from_pretrained(checkpoint, cache_dir=cache_dir, model_max_length=model_max_length, trust_remote_code=True)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collote_fn)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=collote_fn)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, tokenizer))
+        test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, tokenizer))
 
     # model
     mlp_parma = {
