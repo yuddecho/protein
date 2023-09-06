@@ -15,7 +15,7 @@ is_test = True
 use_dnabert_single_embedding = True
 
 # 使用服务器
-use_main_ssi = False
+use_main_ssi = True
 
 training_methods = 1
 
@@ -259,12 +259,7 @@ if use_dnabert_single_embedding:
     
     # cuda
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    if torch.cuda.device_count() > 1:
-        print(f"Let's use, {torch.cuda.device_count()}, GPUs!")
-        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-        dna_bert_2 = nn.DataParallel(mdna_bert_2odel)
-    else:
-        print(f"Let's use, {device}!")
+    print(f"Let's use, {device}!")
     
     dna_bert_2 = dna_bert_2.to(device)
     dna_bert_2.eval()
@@ -668,7 +663,7 @@ if training_methods == 1 and not is_debug:
             # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
             model = nn.DataParallel(model)
         else:
-#             print(f"Let's use, {device}!")
+            print(f"Let's use, {device}!")
 
         model = model.to(device)
 
