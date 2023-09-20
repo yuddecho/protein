@@ -9,10 +9,28 @@
 
 # In[1]:
 
+import argparse
+
+parser = argparse.ArgumentParser(description='命令行中传入一个数字')
+
+#type是要传入的参数的数据类型  help是该参数的提示信息
+parser.add_argument('--gpu', type=str, help='传入的数字')
+
+args = parser.parse_args()
+
+use_gpu_id = args.gpu
+print(f'gpu: {use_gpu_id}')
+
+
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = f'{use_gpu_id}'
+
+model_layers = int(use_gpu_id)
+
 
 is_debug = False
 
-is_preprocessing_data = True
+is_preprocessing_data = False
 is_test_data = False
 show_data_pic = False
 
@@ -25,8 +43,6 @@ training_methods = 1
 
 trials = 80
 num_epoch = 50
-
-log_file_tag = 1
 
 if False:
     is_preprocessing_data = True
@@ -49,7 +65,7 @@ class Logging:
     def __init__(self, log_file=None):
         self.log_file = log_file
         if self.log_file is None:
-            self.log_file = f'data/log-{log_file_tag}.txt'
+            self.log_file = f'data/log-{use_gpu_id}.txt'
 
     def init(self):
         if os.path.exists(self.log_file):
@@ -626,7 +642,7 @@ if training_methods == 1 and not is_debug:
     #         use_mean = _use_mean
     #         layers = _layers
     use_mean = True
-    layers = 3
+    layers = model_layers
 
     # start bayesian opt
     n_trials = trials
