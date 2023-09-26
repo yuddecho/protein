@@ -366,8 +366,8 @@ if __name__ == "__main__":
     parser.add_argument('--attention', action='store_true', help='添加注意力层')
 
     args = parser.parse_args()
-    args.blstm = True
-    args.attention = True
+    # args.blstm = True
+    # args.attention = True
     print(args)
 
     use_gpu_id = args.gpu
