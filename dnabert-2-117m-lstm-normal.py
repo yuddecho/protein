@@ -262,7 +262,7 @@ class SequenceRegression(nn.Module):
         return output
 
 
-def custom_objective(use_web_ssi, use_double_lstm, use_attention, logging):
+def custom_objective(use_web_ssi, use_double_lstm, use_attention, batch_size, logging):
     def objective(trial):
         # 对数均匀分布的下界。通常是超参数的最小值，最大值
         learning_rate = trial.suggest_float('lr', 1e-6, 1, log=True)
@@ -270,8 +270,8 @@ def custom_objective(use_web_ssi, use_double_lstm, use_attention, logging):
         lstm_unit_num = int(trial.suggest_float('lstm_unit_mum', 256, 1024, log=True))
 
         # hyper-parameters
-        epoch_num = 80
-        batch_size = 16
+        epoch_num = 50
+        # batch_size = 16
         tag = f'Model-{lstm_unit_num}-{batch_size}-{round(learning_rate, 3)}-{round(dropout, 3)}-{use_double_lstm}-{use_attention}'
         logging.msg(f'Tag: {tag}')
 
@@ -322,7 +322,7 @@ def custom_objective(use_web_ssi, use_double_lstm, use_attention, logging):
             progress_bar = tqdm(range(epoch_num))
             progress_bar.set_description(f'Train acc: {0:>4f}')
 
-        limit_count_max = 16
+        limit_count_max = 10
         limit_count = limit_count_max
 
         bast_acc = -sys.maxsize - 1
@@ -348,7 +348,7 @@ def custom_objective(use_web_ssi, use_double_lstm, use_attention, logging):
                 progress_bar.set_description(f'Train acc: {bast_acc:>4f}, {test_acc:>4f}')
                 progress_bar.update(1)
             else:
-                logging.msg(f'{trial.number}, Epoch {t + 1}/{epoch_num} {round(total_seconds, 2)}s, {round((total_seconds*80*80)/3600.0, 2)}h: {train_data}, {test_data}, best: {bast_acc}')
+                logging.msg(f'{trial.number}, Epoch {t + 1}/{epoch_num} {round(total_seconds, 2)}s, {round((total_seconds*(100-trial.number)*50)/3600.0, 2)}h: {train_data}, {test_data}, best: {bast_acc}')
 
             if limit_count == 0:
                 break
@@ -364,6 +364,8 @@ if __name__ == "__main__":
     parser.add_argument('--ssi', action='store_true', help='启用服务器')
     parser.add_argument('--blstm', action='store_true', help='启用双向LSTM')
     parser.add_argument('--attention', action='store_true', help='添加注意力层')
+    parser.add_argument('--lun', type=int, default=512, help='lstm unit number')
+    parser.add_argument('--batch', type=int, default=8, help='batch size')
 
     args = parser.parse_args()
     # args.blstm = True
@@ -388,10 +390,10 @@ if __name__ == "__main__":
 
     # 创建 Optuna study 并传递额外的参数
     study = optuna.create_study(direction='maximize')
-    study.enqueue_trial({'lr': 0.001, 'dropout': 0.1, 'lstm_unit_mum': 512})  # 初始参数设置
+    study.enqueue_trial({'lr': 0.001, 'dropout': 0.1, 'lstm_unit_mum': args.lun})  # 初始参数设置
     # study.user_attrs['use_double_lstm'] = args.blstm  # 传递额外的参数
     # study.user_attrs['use_attention'] = args.attention  # 传递额外的参数
-    study.optimize(custom_objective(args.ssi, args.blstm, args.attention, logging), n_trials=100)
+    study.optimize(custom_objective(args.ssi, args.blstm, args.attention, args.batch, logging), n_trials=100)
 
     # result
     logging.msg("Best trial:")
