@@ -365,7 +365,7 @@ if __name__ == "__main__":
     parser.add_argument('--blstm', action='store_true', help='启用双向LSTM')
     parser.add_argument('--attention', action='store_true', help='添加注意力层')
     parser.add_argument('--lun', type=int, default=512, help='lstm unit number')
-    parser.add_argument('--batch', type=int, default=8, help='batch size')
+    parser.add_argument('--batch', type=int, default=16, help='batch size')
 
     args = parser.parse_args()
     # args.blstm = True
